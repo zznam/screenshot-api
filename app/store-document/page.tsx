@@ -49,7 +49,7 @@ export default function DocumentPage() {
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Document Upload</CardTitle>
-          <CardDescription>Upload content in various formats</CardDescription>
+          <CardDescription>Upload content in various formats. Files will be saved with a timestamp in the filename.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -84,10 +84,11 @@ export default function DocumentPage() {
               <Label htmlFor="filename">Filename (optional)</Label>
               <Input
                 id="filename"
-                placeholder="my-document"
+                placeholder="my-document (will be saved as my-document-2024-03-21T15-30-45-123Z.json)"
                 value={filename}
                 onChange={(e) => setFilename(e.target.value)}
               />
+              <p className="text-sm text-gray-500">A timestamp will be automatically added to ensure unique filenames</p>
             </div>
 
             <Button type="submit" className="w-full" disabled={loading}>

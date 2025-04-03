@@ -75,9 +75,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate a unique filename if not provided
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const uniqueFilename = filename
-      ? `${filename}.${fileExtension}`
-      : `${uuidv4()}.${fileExtension}`
+      ? `${filename}-${timestamp}.${fileExtension}`
+      : `${uuidv4()}-${timestamp}.${fileExtension}`
 
     const bucketName = process.env.S3_BUCKET_NAME || ""
 
