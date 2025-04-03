@@ -20,8 +20,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing required parameters: url, selector" }, { status: 400 })
     }
 
-    // Launch browser
-    const browser = await chromium.launch()
+    // Launch browser with specific configuration for Vercel
+    const browser = await chromium.launch({
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined
+    })
     const page = await browser.newPage()
 
     try {
