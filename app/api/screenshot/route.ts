@@ -14,14 +14,10 @@ const s3Client = new S3Client({
 
 export async function POST(request: NextRequest) {
   try {
-    const { url, selector, selectorType } = await request.json()
+    const { url, selector } = await request.json()
 
-    if (!url || !selector || !selectorType) {
-      return NextResponse.json({ error: "Missing required parameters: url, selector, selectorType" }, { status: 400 })
-    }
-
-    if (selectorType !== "className" && selectorType !== "id") {
-      return NextResponse.json({ error: 'selectorType must be either "className" or "id"' }, { status: 400 })
+    if (!url || !selector) {
+      return NextResponse.json({ error: "Missing required parameters: url, selector" }, { status: 400 })
     }
 
     // Launch browser
@@ -29,11 +25,14 @@ export async function POST(request: NextRequest) {
     const page = await browser.newPage()
 
     try {
+      // Set viewport size
+      await page.setViewportSize({ width: 1920, height: 1080 })
+
       // Navigate to the URL
       await page.goto(url, { waitUntil: "networkidle" })
 
-      // Find the element based on selector type
-      const locator = selectorType === "className" ? page.locator(`.${selector}`) : page.locator(`#${selector}`)
+      // Find the element using the CSS selector
+      const locator = page.locator(selector)
 
       // Wait for the element to be visible
       await locator.waitFor({ state: "visible", timeout: 10000 })
@@ -41,8 +40,67 @@ export async function POST(request: NextRequest) {
       // Scroll element into view if needed
       await locator.scrollIntoViewIfNeeded()
 
+      // Hide only sibling elements while keeping parent and child elements visible
+      await page.evaluate((sel) => {
+        const targetElement = document.querySelector(sel)
+        if (!targetElement) return
+
+        // Function to get all parent elements
+        const getParents = (element: Element): Element[] => {
+          const parents: Element[] = []
+          let current = element.parentElement
+          while (current) {
+            parents.push(current)
+            current = current.parentElement
+          }
+          return parents
+        }
+
+        // Function to get all child elements
+        const getChildren = (element: Element): Element[] => {
+          const children: Element[] = []
+          const walker = document.createTreeWalker(
+            element,
+            NodeFilter.SHOW_ELEMENT,
+            null
+          )
+          let node: Element | null = walker.nextNode() as Element
+          while (node) {
+            if (node !== element) {
+              children.push(node)
+            }
+            node = walker.nextNode() as Element
+          }
+          return children
+        }
+
+        // Get all parent and child elements
+        const parents = getParents(targetElement)
+        const children = getChildren(targetElement)
+
+        // Hide all elements except the target, its parents, and its children
+        const elements = document.querySelectorAll('*')
+        elements.forEach((el) => {
+          if (el !== targetElement && !parents.includes(el) && !children.includes(el)) {
+            (el as HTMLElement).style.visibility = 'hidden'
+          }
+        })
+      }, selector)
+
       // Take screenshot of the element
-      const screenshot = await locator.screenshot()
+      const screenshot = await locator.screenshot({
+        type: 'png',
+        scale: 'device',
+        omitBackground: true
+      })
+
+      // Restore visibility of all elements
+      await page.evaluate(() => {
+        const elements = document.querySelectorAll('*')
+        elements.forEach((el) => {
+          (el as HTMLElement).style.visibility = 'visible'
+        })
+      })
 
       // Generate a unique filename
       const filename = `${uuidv4()}.png`

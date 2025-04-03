@@ -6,14 +6,12 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Loader2 } from "lucide-react"
 
 export default function Home() {
   const [url, setUrl] = useState("")
   const [selector, setSelector] = useState("")
-  const [selectorType, setSelectorType] = useState("className")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{ success: boolean; screenshotUrl?: string; error?: string } | null>(null)
 
@@ -31,7 +29,6 @@ export default function Home() {
         body: JSON.stringify({
           url,
           selector,
-          selectorType,
         }),
       })
 
@@ -49,7 +46,7 @@ export default function Home() {
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Webpage Element Screenshot</CardTitle>
-          <CardDescription>Enter a URL and element selector to take a screenshot</CardDescription>
+          <CardDescription>Enter a URL and CSS selector to take a screenshot</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -65,28 +62,14 @@ export default function Home() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="selector">Element Selector</Label>
+              <Label htmlFor="selector">CSS Selector</Label>
               <Input
                 id="selector"
-                placeholder="header-container"
+                placeholder=".my-class, #my-id, div > span"
                 value={selector}
                 onChange={(e) => setSelector(e.target.value)}
                 required
               />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Selector Type</Label>
-              <RadioGroup value={selectorType} onValueChange={setSelectorType} className="flex space-x-4">
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="className" id="className" />
-                  <Label htmlFor="className">Class Name</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="id" id="id" />
-                  <Label htmlFor="id">ID</Label>
-                </div>
-              </RadioGroup>
             </div>
 
             <Button type="submit" className="w-full" disabled={loading}>
