@@ -14,16 +14,41 @@ const s3Client = new S3Client({
 
 export async function POST(request: NextRequest) {
   try {
+    // Validate environment variables
+    const requiredEnvVars = [
+      "AWS_REGION",
+      "AWS_ACCESS_KEY_ID",
+      "AWS_SECRET_ACCESS_KEY",
+      "S3_BUCKET_NAME",
+    ]
+    const missingEnvVars = requiredEnvVars.filter(
+      (varName) => !process.env[varName]
+    )
+
+    if (missingEnvVars.length > 0) {
+      console.error("Missing environment variables:", missingEnvVars)
+      return NextResponse.json(
+        {
+          error: "Missing required environment variables",
+          details: missingEnvVars,
+        },
+        { status: 500 }
+      )
+    }
     const { url, selector } = await request.json()
 
     if (!url || !selector) {
-      return NextResponse.json({ error: "Missing required parameters: url, selector" }, { status: 400 })
+      return NextResponse.json(
+        { error: "Missing required parameters: url, selector" },
+        { status: 400 }
+      )
     }
 
     // Launch browser with specific configuration for Vercel
     const browser = await chromium.launch({
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+      executablePath:
+        process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
     })
     const page = await browser.newPage()
 
@@ -82,26 +107,30 @@ export async function POST(request: NextRequest) {
         const children = getChildren(targetElement)
 
         // Hide all elements except the target, its parents, and its children
-        const elements = document.querySelectorAll('*')
+        const elements = document.querySelectorAll("*")
         elements.forEach((el) => {
-          if (el !== targetElement && !parents.includes(el) && !children.includes(el)) {
-            (el as HTMLElement).style.visibility = 'hidden'
+          if (
+            el !== targetElement &&
+            !parents.includes(el) &&
+            !children.includes(el)
+          ) {
+            ;(el as HTMLElement).style.visibility = "hidden"
           }
         })
       }, selector)
 
       // Take screenshot of the element
       const screenshot = await locator.screenshot({
-        type: 'png',
-        scale: 'device',
-        omitBackground: true
+        type: "png",
+        scale: "device",
+        omitBackground: true,
       })
 
       // Restore visibility of all elements
       await page.evaluate(() => {
-        const elements = document.querySelectorAll('*')
+        const elements = document.querySelectorAll("*")
         elements.forEach((el) => {
-          (el as HTMLElement).style.visibility = 'visible'
+          ;(el as HTMLElement).style.visibility = "visible"
         })
       })
 
@@ -131,7 +160,9 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     console.error("Error taking screenshot:", error)
-    return NextResponse.json({ error: "Failed to take screenshot" }, { status: 500 })
+    return NextResponse.json(
+      { error: "Failed to take screenshot" },
+      { status: 500 }
+    )
   }
 }
-
