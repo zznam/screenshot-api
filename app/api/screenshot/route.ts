@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
       // If clickSelector is provided, click the element and wait for navigation
       if (clickSelector) {
         const clickLocator = page.locator(clickSelector).first()
-        await clickLocator.waitFor({ state: "visible", timeout: 10000 })
+        await clickLocator.waitFor({ state: "visible", timeout: 30000 })
         await clickLocator.click()
         // wait for action have been completed
         await page.waitForTimeout(5000)
