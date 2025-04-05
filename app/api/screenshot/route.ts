@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
         await clickLocator.waitFor({ state: "visible", timeout: 10000 })
         await clickLocator.click()
         // wait for action have been completed
-        await page.waitForTimeout(2000)
+        await page.waitForTimeout(5000)
         // Wait for navigation to complete
         await page.waitForLoadState("networkidle")
       }
