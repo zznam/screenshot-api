@@ -71,77 +71,93 @@ export async function POST(request: NextRequest) {
       }
 
       // If selector is provided, take screenshot of specific element
-      let screenshot: Buffer
+      let screenshot: Buffer | null = null
       if (selector) {
         const locator = page.locator(selector).first()
-        await locator.waitFor({ state: "visible", timeout: 10000 })
-        await locator.scrollIntoViewIfNeeded()
+        try {
+          console.log(`Waiting for element ${selector} to become visible...`)
+          await locator.waitFor({ state: "visible", timeout: 30000 }) // Increased timeout to 30 seconds
+          console.log(`Element ${selector} is now visible`)
 
-        // Hide only sibling elements while keeping parent and child elements visible
-        await page.evaluate((sel) => {
-          const targetElement = document.querySelector(sel)
-          if (!targetElement) return
+          await locator.scrollIntoViewIfNeeded()
+          console.log(`Scrolled element ${selector} into view`)
 
-          // Function to get all parent elements
-          const getParents = (element: Element): Element[] => {
-            const parents: Element[] = []
-            let current = element.parentElement
-            while (current) {
-              parents.push(current)
-              current = current.parentElement
-            }
-            return parents
-          }
+          // Hide only sibling elements while keeping parent and child elements visible
+          await page.evaluate((sel) => {
+            const targetElement = document.querySelector(sel)
+            if (!targetElement) return
 
-          // Function to get all child elements
-          const getChildren = (element: Element): Element[] => {
-            const children: Element[] = []
-            const walker = document.createTreeWalker(
-              element,
-              NodeFilter.SHOW_ELEMENT,
-              null
-            )
-            let node: Element | null = walker.nextNode() as Element
-            while (node) {
-              if (node !== element) {
-                children.push(node)
+            // Function to get all parent elements
+            const getParents = (element: Element): Element[] => {
+              const parents: Element[] = []
+              let current = element.parentElement
+              while (current) {
+                parents.push(current)
+                current = current.parentElement
               }
-              node = walker.nextNode() as Element
+              return parents
             }
-            return children
+
+            // Function to get all child elements
+            const getChildren = (element: Element): Element[] => {
+              const children: Element[] = []
+              const walker = document.createTreeWalker(
+                element,
+                NodeFilter.SHOW_ELEMENT,
+                null
+              )
+              let node: Element | null = walker.nextNode() as Element
+              while (node) {
+                if (node !== element) {
+                  children.push(node)
+                }
+                node = walker.nextNode() as Element
+              }
+              return children
+            }
+
+            // Get all parent and child elements
+            const parents = getParents(targetElement)
+            const children = getChildren(targetElement)
+
+            // Hide all elements except the target, its parents, and its children
+            const elements = document.querySelectorAll("*")
+            elements.forEach((el) => {
+              if (
+                el !== targetElement &&
+                !parents.includes(el) &&
+                !children.includes(el)
+              ) {
+                ;(el as HTMLElement).style.visibility = "hidden"
+              }
+            })
+          }, selector)
+
+          // Take screenshot of the element
+          screenshot = await locator.screenshot({
+            type: "png",
+            scale: "device",
+            omitBackground: true,
+          })
+
+          // Restore visibility of all elements
+          await page.evaluate(() => {
+            const elements = document.querySelectorAll("*")
+            elements.forEach((el) => {
+              ;(el as HTMLElement).style.visibility = "visible"
+            })
+          })
+        } catch (error) {
+          console.error(`Error while waiting for element ${selector}:`, error)
+          // If the element exists but is not visible, try to take screenshot anyway
+          if ((await locator.count()) > 0) {
+            console.log(
+              `Element ${selector} exists but may not be visible, attempting screenshot anyway`
+            )
+          } else {
+            throw new Error(`Element ${selector} not found on the page`)
           }
-
-          // Get all parent and child elements
-          const parents = getParents(targetElement)
-          const children = getChildren(targetElement)
-
-          // Hide all elements except the target, its parents, and its children
-          const elements = document.querySelectorAll("*")
-          elements.forEach((el) => {
-            if (
-              el !== targetElement &&
-              !parents.includes(el) &&
-              !children.includes(el)
-            ) {
-              ;(el as HTMLElement).style.visibility = "hidden"
-            }
-          })
-        }, selector)
-
-        // Take screenshot of the element
-        screenshot = await locator.screenshot({
-          type: "png",
-          scale: "device",
-          omitBackground: true,
-        })
-
-        // Restore visibility of all elements
-        await page.evaluate(() => {
-          const elements = document.querySelectorAll("*")
-          elements.forEach((el) => {
-            ;(el as HTMLElement).style.visibility = "visible"
-          })
-        })
+        }
       } else {
         // Take full page screenshot if no selector is provided
         screenshot = await page.screenshot({
@@ -153,6 +169,10 @@ export async function POST(request: NextRequest) {
       // Generate a unique filename
       const filename = `${uuidv4()}.png`
       const bucketName = process.env.S3_BUCKET_NAME || ""
+
+      if (!screenshot) {
+        throw new Error("Failed to capture screenshot")
+      }
 
       // Upload to S3
       const uploadParams = {
