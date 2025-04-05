@@ -21,6 +21,9 @@ const nextConfig = {
     parallelServerBuildTraces: true,
     parallelServerCompiles: true,
   },
+  serverRuntimeConfig: {
+    requestTimeout: 60000, // 60 seconds in milliseconds
+  },
 }
 
 mergeConfig(nextConfig, userConfig)

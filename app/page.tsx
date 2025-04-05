@@ -12,6 +12,7 @@ import { Loader2 } from "lucide-react"
 export default function Home() {
   const [url, setUrl] = useState("")
   const [selector, setSelector] = useState("")
+  const [clickSelector, setClickSelector] = useState("")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{ success: boolean; screenshotUrl?: string; error?: string } | null>(null)
 
@@ -28,7 +29,8 @@ export default function Home() {
         },
         body: JSON.stringify({
           url,
-          selector,
+          selector: selector || undefined,
+          clickSelector: clickSelector || undefined,
         }),
       })
 
@@ -45,8 +47,8 @@ export default function Home() {
     <main className="flex min-h-screen flex-col items-center justify-center p-4 md:p-24">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Webpage Element Screenshot</CardTitle>
-          <CardDescription>Enter a URL and CSS selector to take a screenshot</CardDescription>
+          <CardTitle>Webpage Screenshot</CardTitle>
+          <CardDescription>Take screenshots of webpages with optional element selection and click actions</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -62,14 +64,29 @@ export default function Home() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="selector">CSS Selector</Label>
+              <Label htmlFor="clickSelector">Click Element (optional)</Label>
+              <Input
+                id="clickSelector"
+                placeholder=".button-class, #button-id"
+                value={clickSelector}
+                onChange={(e) => setClickSelector(e.target.value)}
+              />
+              <p className="text-sm text-muted-foreground">
+                CSS selector for the element to click before taking the screenshot
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="selector">Screenshot Element (optional)</Label>
               <Input
                 id="selector"
                 placeholder=".my-class, #my-id, div > span"
                 value={selector}
                 onChange={(e) => setSelector(e.target.value)}
-                required
               />
+              <p className="text-sm text-muted-foreground">
+                CSS selector for the specific element to screenshot. Leave empty for full page screenshot.
+              </p>
             </div>
 
             <Button type="submit" className="w-full" disabled={loading}>
