@@ -104,8 +104,20 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Deploy Scripts
 
-1. Pull the latest code and restart the server
+### Login to the server
 
-```bash
-yarn pull && yarn build && pm2 reload next-app && pm2 logs next-app
-```
+  ```bash
+  ssh -i "zzwin.pem" ubuntu@ec2-52-63-80-2.ap-southeast-2.compute.amazonaws.com
+  ```
+
+### Pull the latest code, build and start the server
+
+  ```bash
+  git pull && yarn build && pm2 start yarn --name "next-app" -- start && pm2 logs next-app
+  ```
+
+### Pull the latest code, build and restart the server
+
+  ```bash
+  yarn pull && yarn build && pm2 reload next-app && pm2 logs next-app
+  ```

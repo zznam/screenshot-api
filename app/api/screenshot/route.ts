@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { chromium } from "playwright"
+import { Browser, chromium } from "playwright"
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3"
 import { v4 as uuidv4 } from "uuid"
 
@@ -13,6 +13,15 @@ const s3Client = new S3Client({
 })
 
 export async function POST(request: NextRequest) {
+  let browser: Browser | null = null
+  const controller = new AbortController()
+  const timeout = setTimeout(() => {
+    controller.abort()
+    if (browser) {
+      browser.close()
+    }
+  }, 60000) // 60 seconds timeout
+
   try {
     // Validate environment variables
     const requiredEnvVars = [
@@ -45,7 +54,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Launch browser with specific configuration for Vercel
-    const browser = await chromium.launch({
+    browser = await chromium.launch({
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
       executablePath:
         process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
@@ -192,9 +201,17 @@ export async function POST(request: NextRequest) {
         screenshotUrl: s3Url,
       })
     } finally {
+      clearTimeout(timeout)
       await browser.close()
     }
   } catch (error) {
+    clearTimeout(timeout)
+    if (error instanceof Error && error.name === 'AbortError') {
+      return NextResponse.json(
+        { error: "Operation timed out after 60 seconds" },
+        { status: 408 }
+      )
+    }
     console.error("Error taking screenshot:", error)
     return NextResponse.json(
       { error: "Failed to take screenshot" },
