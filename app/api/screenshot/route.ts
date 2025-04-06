@@ -19,7 +19,7 @@ class RequestQueue {
   private maxConcurrent: number
   private currentRequests: number
 
-  constructor(maxConcurrent = 3) {
+  constructor(maxConcurrent = 5) {
     this.queue = []
     this.processing = false
     this.maxConcurrent = maxConcurrent
