@@ -119,7 +119,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ### Pull the latest code, build and restart the server
 
   ```bash
-  cd screenshot-api && yarn pull && yarn build && pm2 reload next-app && pm2 logs next-app
+  cd screenshot-api && git pull && yarn build && pm2 reload next-app && pm2 logs next-app
   ```
 
 ## Development Links

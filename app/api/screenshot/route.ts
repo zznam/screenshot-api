@@ -27,7 +27,9 @@ class RequestQueue {
   }
 
   private logQueueStatus() {
-    console.log(`Queue Status: ${this.currentRequests} active requests, ${this.queue.length} tasks waiting, ${this.maxConcurrent} max concurrent`)
+    console.log(
+      `Queue Status: ${this.currentRequests} active requests, ${this.queue.length} tasks waiting, ${this.maxConcurrent} max concurrent`
+    )
   }
 
   async enqueue<T>(fn: () => Promise<T>): Promise<T> {
@@ -54,7 +56,11 @@ class RequestQueue {
   }
 
   private processNext() {
-    if (this.processing || this.queue.length === 0 || this.currentRequests >= this.maxConcurrent) {
+    if (
+      this.processing ||
+      this.queue.length === 0 ||
+      this.currentRequests >= this.maxConcurrent
+    ) {
       return
     }
 
@@ -127,9 +133,9 @@ export async function POST(request: NextRequest) {
         await page.setViewportSize({ width: 1920, height: 1080 })
 
         // Navigate to the URL with optimized wait strategy
-        await page.goto(url, { 
+        await page.goto(url, {
           waitUntil: "domcontentloaded",
-          timeout: 15000 // 15 seconds timeout for page load
+          timeout: 15000, // 15 seconds timeout for page load
         })
 
         // If clickSelector is provided, click the element and wait for navigation
@@ -270,7 +276,7 @@ export async function POST(request: NextRequest) {
       }
     } catch (error) {
       clearTimeout(timeout)
-      if (error instanceof Error && error.name === 'AbortError') {
+      if (error instanceof Error && error.name === "AbortError") {
         return NextResponse.json(
           { error: "Operation timed out after 30 seconds" },
           { status: 408 }
