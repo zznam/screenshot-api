@@ -85,7 +85,7 @@ export default function Home() {
                 onChange={(e) => setSelector(e.target.value)}
               />
               <p className="text-sm text-muted-foreground">
-                CSS selector for the specific element to screenshot. Leave empty for full page screenshot.
+                If provided, Playwright will click on the element and take a screenshot by the "selector" parameter.
               </p>
             </div>
 
