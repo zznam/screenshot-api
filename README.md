@@ -9,12 +9,16 @@ A Next.js API endpoint that captures screenshots of web pages and stores them in
 - Automatic upload to AWS S3
 - Configurable viewport size
 - Element isolation for cleaner screenshots
+- Request queueing with configurable concurrency
+- Automatic timeout handling (2 minutes)
+- Smart page navigation handling
+- Element visibility and scroll handling
 
 ## Prerequisites
 
 - Node.js (v14 or later)
 - AWS account with S3 access
-- Playwright dependencies
+- Puppeteer dependencies
 
 ## Environment Variables
 
@@ -25,7 +29,6 @@ AWS_REGION=your-aws-region
 AWS_ACCESS_KEY_ID=your-access-key
 AWS_SECRET_ACCESS_KEY=your-secret-key
 S3_BUCKET_NAME=your-bucket-name
-PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/path/to/chromium (optional)
 ```
 
 ## Installation
@@ -38,11 +41,6 @@ PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/path/to/chromium (optional)
     ```
 
 3. Set up your environment variables
-4. Install Playwright browsers:
-
-    ```bash
-    npx playwright install chromium
-    ```
 
 ## API Usage
 
@@ -71,12 +69,20 @@ Send a POST request to `/api/screenshot` with the following JSON body:
 }
 ```
 
-## Error Handling
+### Error Handling
 
 The API returns appropriate error responses with status codes:
 
 - 400: Missing required parameters
 - 500: Server errors or missing environment variables
+- 504: Request timeout (after 2 minutes)
+
+### Performance Considerations
+
+- The API implements a request queue with a default concurrency of 5 requests
+- Each request has a timeout of 2 minutes
+- Screenshots are optimized using pngquant before upload
+- The API handles both single-page and multi-page navigation scenarios
 
 ## Development
 
@@ -124,7 +130,6 @@ Contributions are welcome! Please feel free to submit a Pull Request.
   npm install --global yarn
 
   yarn install
-
   ```
 
 ### Pull the latest code, build and start the server
