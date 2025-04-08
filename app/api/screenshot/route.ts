@@ -1,8 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { Browser, chromium } from "playwright"
+import puppeteer, { Page } from "puppeteer"
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3"
 import { v4 as uuidv4 } from "uuid"
-import pngquant from 'pngquant'
+import pngquant from "pngquant"
 
 // Initialize S3 client
 const s3Client = new S3Client({
@@ -81,14 +81,14 @@ const requestQueue = new RequestQueue()
 
 export async function POST(request: NextRequest) {
   return requestQueue.enqueue(async () => {
-    let browser: Browser | null = null
+    let browser: any = null
     const controller = new AbortController()
     const timeout = setTimeout(() => {
       controller.abort()
       if (browser) {
         browser.close()
       }
-    }, 30000) // Reduced timeout to 30 seconds
+    }, 1000 * 60 * 2) // Reduced timeout to 2 minutes
 
     try {
       // Validate environment variables
@@ -122,48 +122,91 @@ export async function POST(request: NextRequest) {
       }
 
       // Launch browser with specific configuration for Vercel
-      browser = await chromium.launch({
-        args: ["--no-sandbox", "--disable-setuid-sandbox"],
-        executablePath:
-          process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+      browser = await puppeteer.launch({
+        headless: true,
       })
+
       const page = await browser.newPage()
 
       try {
         // Set viewport size
-        await page.setViewportSize({ width: 1920, height: 1080 })
+        await page.setViewport({ width: 1920, height: 1080 })
 
         // Navigate to the URL with optimized wait strategy
-        await page.goto(url, {
-          waitUntil: "domcontentloaded",
-          timeout: 15000, // 15 seconds timeout for page load
-        })
+        await page.goto(url, { waitUntil: "networkidle2" })
 
+        // Create a promise that resolves when a new page is created
+        const newPagePromise = new Promise((resolve) => {
+          browser.once("targetcreated", async (target: any) => {
+            const newPage = await target.page()
+            if (newPage) resolve(newPage)
+          })
+        })
         // If clickSelector is provided, click the element and wait for navigation
-        if (clickSelector) {
-          const clickLocator = page.locator(clickSelector).first()
-          await clickLocator.waitFor({ state: "visible", timeout: 10000 }) // Reduced to 10 seconds
-          await clickLocator.click()
-          // Reduced wait time after click
-          await page.waitForTimeout(2000)
-          // Wait for navigation with shorter timeout
-          await page.waitForLoadState("domcontentloaded", { timeout: 10000 })
+        const elementExists = clickSelector && (await page.$(clickSelector))
+        if (elementExists) {
+          await page.waitForSelector(clickSelector, {
+            visible: true,
+            timeout: 10000,
+          })
+          // scroll clickSelector into view
+          await page.evaluate((sel: string) => {
+            const element = document.querySelector(sel)
+            if (element) {
+              element.scrollIntoView({ behavior: "smooth", block: "center" })
+            }
+          }, clickSelector)
+
+          // sleep 10s
+          await new Promise((resolve) => setTimeout(resolve, 10000))
         }
 
+        // Determine which page to screenshot (original or new)
+        let pageToScreenshot
+
+        try {
+          // Try to get the new page with a short timeout
+          const newPageTimeoutPromise = new Promise<null>((_, reject) => {
+            setTimeout(() => reject(new Error("No new page opened")), 1000)
+          })
+
+          pageToScreenshot = (await Promise.race([
+            newPagePromise,
+            newPageTimeoutPromise,
+          ])) as Page
+
+          // If we got here, a new page was opened
+          // Wait for the new page to load
+          await pageToScreenshot
+            .waitForNavigation({ waitUntil: "networkidle2", timeout: 10000 })
+            .catch(() =>
+              console.log("Navigation timeout on new page, continuing anyway")
+            )
+        } catch (error) {
+          // No new page was opened, use the original page
+          pageToScreenshot = page
+        }
         // If selector is provided, take screenshot of specific element
         let screenshot: Buffer | null = null
         if (selector) {
-          const locator = page.locator(selector).first()
           try {
             console.log(`Waiting for element ${selector} to become visible...`)
-            await locator.waitFor({ state: "visible", timeout: 10000 })
+            await pageToScreenshot.waitForSelector(selector, {
+              visible: true,
+              timeout: 10000,
+            })
             console.log(`Element ${selector} is now visible`)
 
-            await locator.scrollIntoViewIfNeeded()
-            console.log(`Scrolled element ${selector} into view`)
+            // Scroll element into view
+            await pageToScreenshot.evaluate((sel: string) => {
+              const element = document.querySelector(sel)
+              if (element) {
+                element.scrollIntoView({ behavior: "smooth", block: "center" })
+              }
+            }, selector)
 
             // Hide only sibling elements while keeping parent and child elements visible
-            await page.evaluate((sel) => {
+            await pageToScreenshot.evaluate((sel: string) => {
               const targetElement = document.querySelector(sel)
               if (!targetElement) return
 
@@ -214,24 +257,17 @@ export async function POST(request: NextRequest) {
             }, selector)
 
             // Take screenshot of the element
-            const rawScreenshot = await locator.screenshot({
-              type: "png",
-              scale: "device",
+            const element = await pageToScreenshot.$(selector)
+            if (!element) {
+              throw new Error(`Element ${selector} not found on the page`)
+            }
+
+            screenshot = await element.screenshot({
               omitBackground: true,
             })
 
-            // Optimize the screenshot using pngquant
-            screenshot = await new Promise<Buffer>((resolve, reject) => {
-              const chunks: Buffer[] = []
-              const stream = new pngquant(['256', '--quality=70-90', '--speed=1', '-'])
-              stream.on('data', (chunk: Buffer) => chunks.push(chunk))
-              stream.on('end', () => resolve(Buffer.concat(chunks)))
-              stream.on('error', reject)
-              stream.end(rawScreenshot)
-            })
-
             // Restore visibility of all elements
-            await page.evaluate(() => {
+            await pageToScreenshot.evaluate(() => {
               const elements = document.querySelectorAll("*")
               elements.forEach((el) => {
                 ;(el as HTMLElement).style.visibility = "visible"
@@ -239,72 +275,74 @@ export async function POST(request: NextRequest) {
             })
           } catch (error) {
             console.error(`Error while waiting for element ${selector}:`, error)
-            if ((await locator.count()) > 0) {
-              console.log(
-                `Element ${selector} exists but may not be visible, attempting screenshot anyway`
-              )
-            } else {
-              throw new Error(`Element ${selector} not found on the page`)
-            }
+            screenshot = await pageToScreenshot.screenshot({
+              type: "png",
+              fullPage: true,
+            })
           }
         } else {
           // Take full page screenshot if no selector is provided
-          const rawScreenshot = await page.screenshot({
+          screenshot = await pageToScreenshot.screenshot({
             type: "png",
             fullPage: true,
           })
-
-          // Optimize the screenshot using pngquant
-          screenshot = await new Promise<Buffer>((resolve, reject) => {
-            const chunks: Buffer[] = []
-            const stream = new pngquant(['256', '--quality=70-90', '--speed=1', '-'])
-            stream.on('data', (chunk: Buffer) => chunks.push(chunk))
-            stream.on('end', () => resolve(Buffer.concat(chunks)))
-            stream.on('error', reject)
-            stream.end(rawScreenshot)
-          })
         }
-
-        // Generate a unique filename
-        const filename = `${uuidv4()}.png`
-        const bucketName = process.env.S3_BUCKET_NAME || ""
 
         if (!screenshot) {
           throw new Error("Failed to capture screenshot")
         }
 
-        // Upload to S3
-        const uploadParams = {
-          Bucket: bucketName,
-          Key: filename,
-          Body: screenshot,
-          ContentType: "image/png",
-        }
-
-        await s3Client.send(new PutObjectCommand(uploadParams))
-
-        // Generate the S3 URL
-        const s3Url = `https://${bucketName}.s3.${process.env.AWS_REGION}.amazonaws.com/${filename}`
-
-        return NextResponse.json({
-          success: true,
-          screenshotUrl: s3Url,
+        const optimizedImage = await new Promise<Buffer>((resolve, reject) => {
+          const chunks: Buffer[] = []
+          const stream = new pngquant([
+            "256",
+            "--quality=70-90",
+            "--speed=1",
+            "-",
+          ])
+          stream.on("data", (chunk: Buffer) => chunks.push(chunk))
+          stream.on("end", () => resolve(Buffer.concat(chunks)))
+          stream.on("error", reject)
+          stream.end(screenshot)
         })
+
+        // Generate a unique filename
+        const filename = `${uuidv4()}.png`
+
+        try {
+          // Upload to S3
+          await s3Client.send(
+            new PutObjectCommand({
+              Bucket: process.env.S3_BUCKET_NAME,
+              Key: filename,
+              Body: optimizedImage,
+              ContentType: "image/png",
+            })
+          )
+
+          // Return the URL of the uploaded image
+          return NextResponse.json({
+            success: true,
+            screenshotUrl: `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${filename}`,
+          })
+        } catch (error) {
+          console.error("Error uploading to S3:", error)
+          throw new Error(
+            `Failed to upload screenshot to S3: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`
+          )
+        }
       } finally {
+        if (browser) {
+          await browser.close()
+        }
         clearTimeout(timeout)
-        await browser?.close()
       }
     } catch (error) {
-      clearTimeout(timeout)
-      if (error instanceof Error && error.name === "AbortError") {
-        return NextResponse.json(
-          { error: "Operation timed out after 30 seconds" },
-          { status: 408 }
-        )
-      }
-      console.error("Error taking screenshot:", error)
+      console.error("Error in screenshot endpoint:", error)
       return NextResponse.json(
-        { error: "Failed to take screenshot" },
+        { error: "Failed to capture screenshot", details: error },
         { status: 500 }
       )
     }
