@@ -136,7 +136,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ### Pull the latest code, build and restart the server
 
   ```bash
-  cd screenshot-api && git pull && yarn build && pm2 reload next-app && pm2 logs next-app
+  cd screenshot-api && git pull && yarn && yarn build && pm2 reload next-app && pm2 logs next-app
   ```
 
 ## Development Links
@@ -145,6 +145,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 - UI Store Document <http://ec2-52-63-80-2.ap-southeast-2.compute.amazonaws.com:3000/store-document>
 - API Screenshot <http://ec2-52-63-80-2.ap-southeast-2.compute.amazonaws.com:3000/api/screenshot>
 - API Store Document <http://ec2-52-63-80-2.ap-southeast-2.compute.amazonaws.com:3000/api/store-document>
+- Alternative Host: <http://ec2-13-239-240-205.ap-southeast-2.compute.amazonaws.com:3000/>
 
 ### Configure your EC2 security group
 

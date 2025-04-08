@@ -83,12 +83,16 @@ export async function POST(request: NextRequest) {
   return requestQueue.enqueue(async () => {
     let browser: Browser | null = null
     const controller = new AbortController()
+    const requestId = uuidv4() // Generate a unique ID for this request
+    console.log(`[${requestId}] Starting screenshot request`)
+    
     const timeout = setTimeout(() => {
       controller.abort()
       if (browser) {
         browser.close()
       }
-    }, 60000) // Reduced timeout to 30 seconds
+      console.log(`[${requestId}] Request timed out after 60 seconds`)
+    }, 60000)
 
     try {
       // Validate environment variables
@@ -103,7 +107,7 @@ export async function POST(request: NextRequest) {
       )
 
       if (missingEnvVars.length > 0) {
-        console.error("Missing environment variables:", missingEnvVars)
+        console.error(`[${requestId}] Missing environment variables:`, missingEnvVars)
         return NextResponse.json(
           {
             error: "Missing required environment variables",
@@ -113,8 +117,10 @@ export async function POST(request: NextRequest) {
         )
       }
       const { url, selector, clickSelector } = await request.json()
+      console.log(`[${requestId}] Request parameters:`, { url, selector, clickSelector })
 
       if (!url) {
+        console.log(`[${requestId}] Missing required parameter: url`)
         return NextResponse.json(
           { error: "Missing required parameter: url" },
           { status: 400 }
@@ -122,52 +128,58 @@ export async function POST(request: NextRequest) {
       }
 
       // Launch browser with specific configuration for Vercel
+      console.log(`[${requestId}] Launching browser...`)
       browser = await chromium.launch({
         args: ["--no-sandbox", "--disable-setuid-sandbox"],
         executablePath:
           process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
       })
       let page = await browser.newPage()
+      console.log(`[${requestId}] Browser launched successfully`)
 
       try {
         // Set viewport size
         await page.setViewportSize({ width: 1920, height: 1080 })
 
         // Navigate to the URL with optimized wait strategy
+        console.log(`[${requestId}] Navigating to URL: ${url}`)
         await page.goto(url, {
           waitUntil: "domcontentloaded",
-          timeout: 15000, // 15 seconds timeout for page load
+          timeout: 15000,
         })
+        console.log(`[${requestId}] Page loaded successfully`)
 
         // If clickSelector is provided, click the element and wait for navigation
         if (clickSelector) {
+          console.log(`[${requestId}] Clicking element: ${clickSelector}`)
           const clickLocator = page.locator(clickSelector).first()
-          await clickLocator.waitFor({ state: "visible", timeout: 10000 }) // Reduced to 10 seconds
+          await clickLocator.waitFor({ state: "visible", timeout: 10000 })
           await clickLocator.click()
           // Handle new page if opened
           const context = browser.contexts()[0]
           const pages = context.pages()
           if (pages.length > 1) {
-            page = pages[pages.length - 1] // Get the most recently opened page
+            page = pages[pages.length - 1]
             await page.waitForLoadState("domcontentloaded", { timeout: 10000 })
           }
-          // Reduced wait time after click
           await page.waitForTimeout(10000)
-          console.log("waiting for navigation")
+          console.log(`[${requestId}] Waiting for navigation after click`)
           await page.waitForLoadState("networkidle", { timeout: 10000 })
+          console.log(`[${requestId}] Navigation completed after click`)
         }
 
         // If selector is provided, take screenshot of specific element
         let screenshot: Buffer | null = null
         if (selector) {
+          console.log(`[${requestId}] Taking screenshot of element: ${selector}`)
           const locator = page.locator(selector).first()
           try {
-            console.log(`Waiting for element ${selector} to become visible...`)
+            console.log(`[${requestId}] Waiting for element ${selector} to become visible...`)
             await locator.waitFor({ state: "visible", timeout: 10000 })
-            console.log(`Element ${selector} is now visible`)
+            console.log(`[${requestId}] Element ${selector} is now visible`)
 
             await locator.scrollIntoViewIfNeeded()
-            console.log(`Scrolled element ${selector} into view`)
+            console.log(`[${requestId}] Scrolled element ${selector} into view`)
 
             // Hide only sibling elements while keeping parent and child elements visible
             await page.evaluate((sel) => {
@@ -226,6 +238,7 @@ export async function POST(request: NextRequest) {
               scale: "device",
               omitBackground: true,
             })
+            console.log(`[${requestId}] Element screenshot captured`)
 
             // Optimize the screenshot using pngquant
             screenshot = await new Promise<Buffer>((resolve, reject) => {
@@ -241,6 +254,7 @@ export async function POST(request: NextRequest) {
               stream.on("error", reject)
               stream.end(rawScreenshot)
             })
+            console.log(`[${requestId}] Screenshot optimized`)
 
             // Restore visibility of all elements
             await page.evaluate(() => {
@@ -250,21 +264,22 @@ export async function POST(request: NextRequest) {
               })
             })
           } catch (error) {
-            console.error(`Error while waiting for element ${selector}:`, error)
+            console.error(`[${requestId}] Error while waiting for element ${selector}:`, error)
             if ((await locator.count()) > 0) {
               console.log(
-                `Element ${selector} exists but may not be visible, attempting screenshot anyway`
+                `[${requestId}] Element ${selector} exists but may not be visible, attempting screenshot anyway`
               )
             } else {
-              throw new Error(`Element ${selector} not found on the page`)
+              throw new Error(`[${requestId}] Element ${selector} not found on the page`)
             }
           }
         } else {
-          // Take full page screenshot if no selector is provided
+          console.log(`[${requestId}] Taking full page screenshot`)
           const rawScreenshot = await page.screenshot({
             type: "png",
             fullPage: true,
           })
+          console.log(`[${requestId}] Full page screenshot captured`)
 
           // Optimize the screenshot using pngquant
           screenshot = await new Promise<Buffer>((resolve, reject) => {
@@ -280,17 +295,21 @@ export async function POST(request: NextRequest) {
             stream.on("error", reject)
             stream.end(rawScreenshot)
           })
+          console.log(`[${requestId}] Screenshot optimized`)
         }
 
         // Generate a unique filename
         const filename = `${uuidv4()}.png`
         const bucketName = process.env.S3_BUCKET_NAME || ""
+        console.log(`[${requestId}] Generated filename: ${filename}`)
 
         if (!screenshot) {
+          console.error(`[${requestId}] Failed to capture screenshot`)
           throw new Error("Failed to capture screenshot")
         }
 
         // Upload to S3
+        console.log(`[${requestId}] Uploading to S3 bucket: ${bucketName}`)
         const uploadParams = {
           Bucket: bucketName,
           Key: filename,
@@ -299,9 +318,11 @@ export async function POST(request: NextRequest) {
         }
 
         await s3Client.send(new PutObjectCommand(uploadParams))
+        console.log(`[${requestId}] Upload completed successfully`)
 
         // Generate the S3 URL
         const s3Url = `https://${bucketName}.s3.${process.env.AWS_REGION}.amazonaws.com/${filename}`
+        console.log(`[${requestId}] Request completed successfully. Screenshot URL: ${s3Url}`)
 
         return NextResponse.json({
           success: true,
@@ -310,16 +331,18 @@ export async function POST(request: NextRequest) {
       } finally {
         clearTimeout(timeout)
         await browser?.close()
+        console.log(`[${requestId}] Browser closed`)
       }
     } catch (error) {
       clearTimeout(timeout)
       if (error instanceof Error && error.name === "AbortError") {
+        console.error(`[${requestId}] Operation timed out after 60 seconds`)
         return NextResponse.json(
-          { error: "Operation timed out after 30 seconds" },
+          { error: "Operation timed out after 60 seconds" },
           { status: 408 }
         )
       }
-      console.error("Error taking screenshot:", error)
+      console.error(`[${requestId}] Error taking screenshot:`, error)
       return NextResponse.json(
         { error: "Failed to take screenshot" },
         { status: 500 }
