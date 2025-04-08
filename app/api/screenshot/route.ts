@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { Browser, chromium } from "playwright"
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3"
 import { v4 as uuidv4 } from "uuid"
-import pngquant from 'pngquant'
+import pngquant from "pngquant"
 
 // Initialize S3 client
 const s3Client = new S3Client({
@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
         executablePath:
           process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
       })
-      const page = await browser.newPage()
+      let page = await browser.newPage()
 
       try {
         // Set viewport size
@@ -144,10 +144,17 @@ export async function POST(request: NextRequest) {
           const clickLocator = page.locator(clickSelector).first()
           await clickLocator.waitFor({ state: "visible", timeout: 10000 }) // Reduced to 10 seconds
           await clickLocator.click()
+          // Handle new page if opened
+          const context = browser.contexts()[0]
+          const pages = context.pages()
+          if (pages.length > 1) {
+            page = pages[pages.length - 1] // Get the most recently opened page
+            await page.waitForLoadState("domcontentloaded", { timeout: 10000 })
+          }
           // Reduced wait time after click
-          await page.waitForTimeout(2000)
-          // Wait for navigation with shorter timeout
-          await page.waitForLoadState("domcontentloaded", { timeout: 10000 })
+          await page.waitForTimeout(10000)
+          console.log("waiting for navigation")
+          await page.waitForLoadState("networkidle", { timeout: 10000 })
         }
 
         // If selector is provided, take screenshot of specific element
@@ -223,10 +230,15 @@ export async function POST(request: NextRequest) {
             // Optimize the screenshot using pngquant
             screenshot = await new Promise<Buffer>((resolve, reject) => {
               const chunks: Buffer[] = []
-              const stream = new pngquant(['256', '--quality=70-90', '--speed=1', '-'])
-              stream.on('data', (chunk: Buffer) => chunks.push(chunk))
-              stream.on('end', () => resolve(Buffer.concat(chunks)))
-              stream.on('error', reject)
+              const stream = new pngquant([
+                "256",
+                "--quality=70-90",
+                "--speed=1",
+                "-",
+              ])
+              stream.on("data", (chunk: Buffer) => chunks.push(chunk))
+              stream.on("end", () => resolve(Buffer.concat(chunks)))
+              stream.on("error", reject)
               stream.end(rawScreenshot)
             })
 
@@ -257,10 +269,15 @@ export async function POST(request: NextRequest) {
           // Optimize the screenshot using pngquant
           screenshot = await new Promise<Buffer>((resolve, reject) => {
             const chunks: Buffer[] = []
-            const stream = new pngquant(['256', '--quality=70-90', '--speed=1', '-'])
-            stream.on('data', (chunk: Buffer) => chunks.push(chunk))
-            stream.on('end', () => resolve(Buffer.concat(chunks)))
-            stream.on('error', reject)
+            const stream = new pngquant([
+              "256",
+              "--quality=70-90",
+              "--speed=1",
+              "-",
+            ])
+            stream.on("data", (chunk: Buffer) => chunks.push(chunk))
+            stream.on("end", () => resolve(Buffer.concat(chunks)))
+            stream.on("error", reject)
             stream.end(rawScreenshot)
           })
         }
