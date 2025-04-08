@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
       if (browser) {
         browser.close()
       }
-    }, 30000) // Reduced timeout to 30 seconds
+    }, 60000) // Reduced timeout to 30 seconds
 
     try {
       // Validate environment variables
