@@ -110,6 +110,23 @@ Contributions are welcome! Please feel free to submit a Pull Request.
   ssh -i "zzwin.pem" ubuntu@ec2-52-63-80-2.ap-southeast-2.compute.amazonaws.com
   ```
 
+### Init setup
+
+  ```bash
+  git clone https://github.com/zznam/screenshot-api.git
+  touch .env.local
+  curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+  sudo apt-get install -y nodejs
+
+  # Install PM2 globally
+  sudo npm install -g pm2
+
+  npm install --global yarn
+
+  yarn install
+
+  ```
+
 ### Pull the latest code, build and start the server
 
   ```bash
@@ -128,3 +145,14 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 - UI Store Document <http://ec2-52-63-80-2.ap-southeast-2.compute.amazonaws.com:3000/store-document>
 - API Screenshot <http://ec2-52-63-80-2.ap-southeast-2.compute.amazonaws.com:3000/api/screenshot>
 - API Store Document <http://ec2-52-63-80-2.ap-southeast-2.compute.amazonaws.com:3000/api/store-document>
+
+### Configure your EC2 security group
+
+Go to EC2 Dashboard
+Select your instance
+Click on the Security tab
+Click on the Security Group
+Add a new inbound rule:
+Type: Custom TCP
+Port: 3000
+Source: 0.0.0.0/0 (or your IP for better security)

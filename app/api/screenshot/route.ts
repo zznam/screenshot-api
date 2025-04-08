@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { Browser, chromium } from "playwright"
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3"
 import { v4 as uuidv4 } from "uuid"
+import pngquant from 'pngquant'
 
 // Initialize S3 client
 const s3Client = new S3Client({
@@ -155,7 +156,7 @@ export async function POST(request: NextRequest) {
           const locator = page.locator(selector).first()
           try {
             console.log(`Waiting for element ${selector} to become visible...`)
-            await locator.waitFor({ state: "visible", timeout: 10000 }) // Reduced to 10 seconds
+            await locator.waitFor({ state: "visible", timeout: 10000 })
             console.log(`Element ${selector} is now visible`)
 
             await locator.scrollIntoViewIfNeeded()
@@ -213,10 +214,20 @@ export async function POST(request: NextRequest) {
             }, selector)
 
             // Take screenshot of the element
-            screenshot = await locator.screenshot({
+            const rawScreenshot = await locator.screenshot({
               type: "png",
               scale: "device",
               omitBackground: true,
+            })
+
+            // Optimize the screenshot using pngquant
+            screenshot = await new Promise<Buffer>((resolve, reject) => {
+              const chunks: Buffer[] = []
+              const stream = new pngquant(['256', '--quality=70-90', '--speed=1', '-'])
+              stream.on('data', (chunk: Buffer) => chunks.push(chunk))
+              stream.on('end', () => resolve(Buffer.concat(chunks)))
+              stream.on('error', reject)
+              stream.end(rawScreenshot)
             })
 
             // Restore visibility of all elements
@@ -228,7 +239,6 @@ export async function POST(request: NextRequest) {
             })
           } catch (error) {
             console.error(`Error while waiting for element ${selector}:`, error)
-            // If the element exists but is not visible, try to take screenshot anyway
             if ((await locator.count()) > 0) {
               console.log(
                 `Element ${selector} exists but may not be visible, attempting screenshot anyway`
@@ -239,9 +249,19 @@ export async function POST(request: NextRequest) {
           }
         } else {
           // Take full page screenshot if no selector is provided
-          screenshot = await page.screenshot({
+          const rawScreenshot = await page.screenshot({
             type: "png",
             fullPage: true,
+          })
+
+          // Optimize the screenshot using pngquant
+          screenshot = await new Promise<Buffer>((resolve, reject) => {
+            const chunks: Buffer[] = []
+            const stream = new pngquant(['256', '--quality=70-90', '--speed=1', '-'])
+            stream.on('data', (chunk: Buffer) => chunks.push(chunk))
+            stream.on('end', () => resolve(Buffer.concat(chunks)))
+            stream.on('error', reject)
+            stream.end(rawScreenshot)
           })
         }
 
