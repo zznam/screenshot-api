@@ -120,11 +120,12 @@ export async function POST(request: NextRequest) {
           { status: 500 }
         )
       }
-      const { url, selector, clickSelector } = await request.json()
+      const { url, selector, clickSelector, filename } = await request.json()
       log(`[${requestId}] Request parameters:`, {
         url,
         selector,
         clickSelector,
+        filename,
       })
 
       if (!url) {
@@ -379,9 +380,9 @@ export async function POST(request: NextRequest) {
         }
 
         // Generate a unique filename
-        const filename = `${uuidv4()}.png`
+        const s3Filename = filename ? `${filename}.png` : `${uuidv4()}.png`
         const bucketName = process.env.S3_BUCKET_NAME || ""
-        log(`[${requestId}] Generated filename: ${filename}`)
+        log(`[${requestId}] Generated filename: ${s3Filename}`)
 
         if (!screenshot) {
           logError(`[${requestId}] Failed to capture screenshot`)
@@ -392,7 +393,7 @@ export async function POST(request: NextRequest) {
         log(`[${requestId}] Uploading to S3 bucket: ${bucketName}`)
         const uploadParams = {
           Bucket: bucketName,
-          Key: filename,
+          Key: s3Filename,
           Body: screenshot,
           ContentType: "image/png",
         }
@@ -401,7 +402,7 @@ export async function POST(request: NextRequest) {
         log(`[${requestId}] Upload completed successfully`)
 
         // Generate the S3 URL
-        const s3Url = `https://${bucketName}.s3.${process.env.AWS_REGION}.amazonaws.com/${filename}`
+        const s3Url = `https://${bucketName}.s3.${process.env.AWS_REGION}.amazonaws.com/${s3Filename}`
         log(
           `[${requestId}] Request completed successfully. Screenshot URL: ${s3Url}`
         )

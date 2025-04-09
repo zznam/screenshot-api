@@ -21,6 +21,7 @@ export default function Home() {
   const [url, setUrl] = useState("")
   const [selector, setSelector] = useState("")
   const [clickSelector, setClickSelector] = useState("")
+  const [filename, setFilename] = useState("")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{
     success: boolean
@@ -43,6 +44,7 @@ export default function Home() {
           url,
           selector: selector || undefined,
           clickSelector: clickSelector || undefined,
+          filename: filename || undefined,
         }),
       })
 
@@ -103,6 +105,19 @@ export default function Home() {
               <p className="text-sm text-muted-foreground">
                 If provided, Playwright will click on the element and take a
                 screenshot by the "selector" parameter.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="filename">Filename (optional)</Label>
+              <Input
+                id="filename"
+                placeholder="my-screenshot (will be saved as my-screenshot.png)"
+                value={filename}
+                onChange={(e) => setFilename(e.target.value)}
+              />
+              <p className="text-sm text-muted-foreground">
+                If provided, the screenshot will be saved with this filename. If not provided, a random UUID will be used.
               </p>
             </div>
 
