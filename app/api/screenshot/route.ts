@@ -158,6 +158,9 @@ export async function POST(request: NextRequest) {
             visible: true,
             timeout: 10000,
           })
+          // click element
+          await page.click(clickSelector)
+
           // scroll clickSelector into view
           await page.evaluate((sel: string) => {
             const element = document.querySelector(sel)
