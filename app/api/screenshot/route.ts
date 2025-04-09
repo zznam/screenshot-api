@@ -4,6 +4,16 @@ import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3"
 import { v4 as uuidv4 } from "uuid"
 import pngquant from "pngquant"
 
+// Logging helper function
+const log = (message: string, data?: any) => {
+  const timestamp = new Date().toISOString()
+  if (data) {
+    console.log(`[${timestamp}] ${message}`, data)
+  } else {
+    console.log(`[${timestamp}] ${message}`)
+  }
+}
+
 // Initialize S3 client
 const s3Client = new S3Client({
   region: process.env.AWS_REGION,
@@ -28,9 +38,7 @@ class RequestQueue {
   }
 
   private logQueueStatus() {
-    console.log(
-      `Queue Status: ${this.currentRequests} active requests, ${this.queue.length} tasks waiting, ${this.maxConcurrent} max concurrent`
-    )
+    log(`Queue Status: ${this.currentRequests} active requests, ${this.queue.length} tasks waiting, ${this.maxConcurrent} max concurrent`)
   }
 
   async enqueue<T>(fn: () => Promise<T>): Promise<T> {
@@ -80,6 +88,7 @@ class RequestQueue {
 const requestQueue = new RequestQueue()
 
 export async function POST(request: NextRequest) {
+  log("Received new screenshot request")
   return requestQueue.enqueue(async () => {
     let browser: any = null
     const controller = new AbortController()
@@ -91,6 +100,7 @@ export async function POST(request: NextRequest) {
     }, 1000 * 60 * 2) // Reduced timeout to 2 minutes
 
     try {
+      log("Validating environment variables")
       // Validate environment variables
       const requiredEnvVars = [
         "AWS_REGION",
@@ -103,7 +113,7 @@ export async function POST(request: NextRequest) {
       )
 
       if (missingEnvVars.length > 0) {
-        console.error("Missing environment variables:", missingEnvVars)
+        log("Missing environment variables", missingEnvVars)
         return NextResponse.json(
           {
             error: "Missing required environment variables",
@@ -112,15 +122,19 @@ export async function POST(request: NextRequest) {
           { status: 500 }
         )
       }
+
       const { url, selector, clickSelector } = await request.json()
+      log("Request parameters", { url, selector, clickSelector })
 
       if (!url) {
+        log("Missing URL parameter")
         return NextResponse.json(
           { error: "Missing required parameter: url" },
           { status: 400 }
         )
       }
 
+      log("Launching browser")
       // Launch browser with specific configuration for Linux
       browser = await puppeteer.launch({
         headless: true,
@@ -136,13 +150,22 @@ export async function POST(request: NextRequest) {
       })
 
       const page = await browser.newPage()
+      log("Created new page")
 
       try {
+        log("Setting viewport")
         // Set viewport size
         await page.setViewport({ width: 1920, height: 1080 })
 
+        log(`Navigating to URL: ${url}`)
         // Navigate to the URL with optimized wait strategy
-        await page.goto(url, { waitUntil: "networkidle2" })
+        await page.goto(url, { 
+          waitUntil: "networkidle2",
+          timeout: 30000 // 30 seconds timeout for navigation
+        }).catch((error: Error) => {
+          log("Navigation timeout", error)
+          throw new Error(`Navigation timeout: ${error.message}`)
+        })
 
         // Create a promise that resolves when a new page is created
         const newPagePromise = new Promise((resolve) => {
@@ -151,17 +174,23 @@ export async function POST(request: NextRequest) {
             if (newPage) resolve(newPage)
           })
         })
+
         // If clickSelector is provided, click the element and wait for navigation
         const elementExists = clickSelector && (await page.$(clickSelector))
         if (elementExists) {
+          log(`Waiting for click selector: ${clickSelector}`)
           await page.waitForSelector(clickSelector, {
             visible: true,
-            timeout: 10000,
+            timeout: 15000, // Increased to 15 seconds
+          }).catch((error: Error) => {
+            log("Click selector timeout", error)
+            throw new Error(`Click selector timeout: ${error.message}`)
           })
-          // click element
+
+          log(`Clicking element: ${clickSelector}`)
           await page.click(clickSelector)
 
-          // scroll clickSelector into view
+          log("Scrolling element into view")
           await page.evaluate((sel: string) => {
             const element = document.querySelector(sel)
             if (element) {
@@ -169,7 +198,7 @@ export async function POST(request: NextRequest) {
             }
           }, clickSelector)
 
-          // sleep 10s
+          log("Waiting 10 seconds after click")
           await new Promise((resolve) => setTimeout(resolve, 10000))
         }
 
@@ -177,9 +206,10 @@ export async function POST(request: NextRequest) {
         let pageToScreenshot
 
         try {
+          log("Checking for new page")
           // Try to get the new page with a short timeout
           const newPageTimeoutPromise = new Promise<null>((_, reject) => {
-            setTimeout(() => reject(new Error("No new page opened")), 1000)
+            setTimeout(() => reject(new Error("No new page opened")), 2000) // Reduced to 2 seconds
           })
 
           pageToScreenshot = (await Promise.race([
@@ -187,29 +217,36 @@ export async function POST(request: NextRequest) {
             newPageTimeoutPromise,
           ])) as Page
 
+          log("New page detected, waiting for navigation")
           // If we got here, a new page was opened
           // Wait for the new page to load
           await pageToScreenshot
-            .waitForNavigation({ waitUntil: "networkidle2", timeout: 10000 })
-            .catch(() =>
+            .waitForNavigation({ 
+              waitUntil: "networkidle2", 
+              timeout: 15000 // Increased to 15 seconds
+            })
+            .catch(error => {
+              log("New page navigation timeout", error)
               console.log("Navigation timeout on new page, continuing anyway")
-            )
+            })
         } catch (error) {
+          log("No new page detected, using original page")
           // No new page was opened, use the original page
           pageToScreenshot = page
         }
+
         // If selector is provided, take screenshot of specific element
         let screenshot: Buffer | null = null
         if (selector) {
           try {
-            console.log(`Waiting for element ${selector} to become visible...`)
+            log(`Waiting for element ${selector} to become visible`)
             await pageToScreenshot.waitForSelector(selector, {
               visible: true,
               timeout: 10000,
             })
-            console.log(`Element ${selector} is now visible`)
+            log(`Element ${selector} is now visible`)
 
-            // Scroll element into view
+            log("Scrolling element into view")
             await pageToScreenshot.evaluate((sel: string) => {
               const element = document.querySelector(sel)
               if (element) {
@@ -218,6 +255,7 @@ export async function POST(request: NextRequest) {
             }, selector)
 
             // Hide only sibling elements while keeping parent and child elements visible
+            log("Preparing element for screenshot")
             await pageToScreenshot.evaluate((sel: string) => {
               const targetElement = document.querySelector(sel)
               if (!targetElement) return
@@ -236,54 +274,49 @@ export async function POST(request: NextRequest) {
               // Function to get all child elements
               const getChildren = (element: Element): Element[] => {
                 const children: Element[] = []
-                const walker = document.createTreeWalker(
-                  element,
-                  NodeFilter.SHOW_ELEMENT,
-                  null
-                )
-                let node: Element | null = walker.nextNode() as Element
-                while (node) {
-                  if (node !== element) {
-                    children.push(node)
+                const walk = (node: Element) => {
+                  children.push(node)
+                  for (const child of Array.from(node.children)) {
+                    walk(child)
                   }
-                  node = walker.nextNode() as Element
                 }
+                walk(element)
                 return children
               }
 
-              // Get all parent and child elements
               const parents = getParents(targetElement)
               const children = getChildren(targetElement)
+              const allElements = document.querySelectorAll('*')
 
-              // Hide all elements except the target, its parents, and its children
-              const elements = document.querySelectorAll("*")
-              elements.forEach((el) => {
+              // Hide all elements except parents and children
+              allElements.forEach((element) => {
                 if (
-                  el !== targetElement &&
-                  !parents.includes(el) &&
-                  !children.includes(el)
+                  !parents.includes(element) &&
+                  !children.includes(element) &&
+                  element !== targetElement
                 ) {
-                  ;(el as HTMLElement).style.visibility = "hidden"
+                  const style = window.getComputedStyle(element)
+                  if (style.display !== 'none') {
+                    (element as HTMLElement).setAttribute('data-original-display', style.display)
+                    (element as HTMLElement).style.display = 'none'
+                  }
                 }
               })
             }, selector)
 
-            // Take screenshot of the element
-            const element = await pageToScreenshot.$(selector)
-            if (!element) {
-              throw new Error(`Element ${selector} not found on the page`)
-            }
-
-            screenshot = await element.screenshot({
-              omitBackground: true,
-            })
-
-            // Restore visibility of all elements
-            await pageToScreenshot.evaluate(() => {
-              const elements = document.querySelectorAll("*")
-              elements.forEach((el) => {
-                ;(el as HTMLElement).style.visibility = "visible"
-              })
+            log("Taking screenshot of element")
+            screenshot = await pageToScreenshot.screenshot({
+              clip: await pageToScreenshot.evaluate((sel: string) => {
+                const element = document.querySelector(sel)
+                if (!element) return null
+                const rect = element.getBoundingClientRect()
+                return {
+                  x: rect.left,
+                  y: rect.top,
+                  width: rect.width,
+                  height: rect.height,
+                }
+              }, selector),
             })
           } catch (error) {
             console.error(`Error while waiting for element ${selector}:`, error)
@@ -301,60 +334,57 @@ export async function POST(request: NextRequest) {
         }
 
         if (!screenshot) {
+          log("Failed to capture screenshot")
           throw new Error("Failed to capture screenshot")
         }
 
-        const optimizedImage = await new Promise<Buffer>((resolve, reject) => {
-          const chunks: Buffer[] = []
-          const stream = new pngquant([
-            "256",
-            "--quality=70-90",
-            "--speed=1",
-            "-",
+        log("Optimizing screenshot")
+        // Optimize the screenshot using pngquant
+        const optimizedScreenshot = await new Promise<Buffer>((resolve, reject) => {
+          const pngquantStream = new pngquant([
+            '256',
+            '--quality=60-80',
+            '--speed=1',
+            '-'
           ])
-          stream.on("data", (chunk: Buffer) => chunks.push(chunk))
-          stream.on("end", () => resolve(Buffer.concat(chunks)))
-          stream.on("error", reject)
-          stream.end(screenshot)
+          const chunks: Buffer[] = []
+
+          pngquantStream.on('data', (chunk: Buffer) => chunks.push(chunk))
+          pngquantStream.on('end', () => resolve(Buffer.concat(chunks)))
+          pngquantStream.on('error', reject)
+
+          pngquantStream.end(screenshot)
         })
 
-        // Generate a unique filename
+        log("Generating unique filename")
         const filename = `${uuidv4()}.png`
 
-        try {
-          // Upload to S3
-          await s3Client.send(
-            new PutObjectCommand({
-              Bucket: process.env.S3_BUCKET_NAME,
-              Key: filename,
-              Body: optimizedImage,
-              ContentType: "image/png",
-            })
-          )
-
-          // Return the URL of the uploaded image
-          return NextResponse.json({
-            success: true,
-            screenshotUrl: `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${filename}`,
+        log("Uploading to S3")
+        // Upload to S3
+        await s3Client.send(
+          new PutObjectCommand({
+            Bucket: process.env.S3_BUCKET_NAME,
+            Key: filename,
+            Body: optimizedScreenshot,
+            ContentType: "image/png",
           })
-        } catch (error) {
-          console.error("Error uploading to S3:", error)
-          throw new Error(
-            `Failed to upload screenshot to S3: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`
-          )
-        }
+        )
+
+        log("Screenshot uploaded successfully")
+        return NextResponse.json({
+          url: `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${filename}`,
+        })
       } finally {
+        log("Cleaning up browser")
         if (browser) {
           await browser.close()
         }
         clearTimeout(timeout)
       }
     } catch (error) {
-      console.error("Error in screenshot endpoint:", error)
+      log("Error in request processing", error)
       return NextResponse.json(
-        { error: "Failed to capture screenshot", details: error },
+        { error: "Internal server error", details: error },
         { status: 500 }
       )
     }
