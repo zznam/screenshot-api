@@ -297,8 +297,9 @@ export async function POST(request: NextRequest) {
                 ) {
                   const style = window.getComputedStyle(element)
                   if (style.display !== 'none') {
-                    (element as HTMLElement).setAttribute('data-original-display', style.display)
-                    (element as HTMLElement).style.display = 'none'
+                    const htmlElement = element as HTMLElement
+                    htmlElement.dataset.originalDisplay = style.display
+                    htmlElement.style.display = 'none'
                   }
                 }
               })
@@ -372,7 +373,7 @@ export async function POST(request: NextRequest) {
 
         log("Screenshot uploaded successfully")
         return NextResponse.json({
-          url: `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${filename}`,
+          screenshotUrl: `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${filename}`,
         })
       } finally {
         log("Cleaning up browser")
