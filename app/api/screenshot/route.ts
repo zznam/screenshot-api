@@ -120,14 +120,23 @@ export async function POST(request: NextRequest) {
           { status: 500 }
         )
       }
-      const { url, selector, clickSelector, filename, viewportWidth, viewportHeight } = await request.json()
+      const {
+        url,
+        selector,
+        clickSelector,
+        filename,
+        viewportWidth,
+        viewportHeight,
+        waitTimeout = 10000,
+      } = await request.json()
       log(`[${requestId}] Request parameters:`, {
         url,
         selector,
         clickSelector,
         filename,
         viewportWidth,
-        viewportHeight
+        viewportHeight,
+        waitTimeout,
       })
 
       if (!url) {
@@ -162,6 +171,20 @@ export async function POST(request: NextRequest) {
           timeout: 15000,
         })
         log(`[${requestId}] Page loaded successfully`)
+
+        // Wait for the specified timeout after page load
+        if (waitTimeout > 0) {
+          log(`[${requestId}] Waiting for ${waitTimeout}ms after page load`)
+          await page.waitForTimeout(waitTimeout)
+        }
+
+        // remove component with id: onetrust-consent-sdk
+        await page.evaluate(() => {
+          const element = document.getElementById("onetrust-consent-sdk")
+          if (element) {
+            element.remove()
+          }
+        })
 
         // If clickSelector is provided, click the element and wait for navigation
         if (clickSelector) {
