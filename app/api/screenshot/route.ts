@@ -120,12 +120,14 @@ export async function POST(request: NextRequest) {
           { status: 500 }
         )
       }
-      const { url, selector, clickSelector, filename } = await request.json()
+      const { url, selector, clickSelector, filename, viewportWidth, viewportHeight } = await request.json()
       log(`[${requestId}] Request parameters:`, {
         url,
         selector,
         clickSelector,
         filename,
+        viewportWidth,
+        viewportHeight
       })
 
       if (!url) {
@@ -147,8 +149,11 @@ export async function POST(request: NextRequest) {
       log(`[${requestId}] Browser launched successfully`)
 
       try {
-        // Set viewport size
-        await page.setViewportSize({ width: 1920, height: 1080 })
+        // Set viewport size with default values
+        const width = parseInt(viewportWidth) || 1280
+        const height = parseInt(viewportHeight) || 800
+        await page.setViewportSize({ width, height })
+        log(`[${requestId}] Viewport set to ${width}x${height}`)
 
         // Navigate to the URL with optimized wait strategy
         log(`[${requestId}] Navigating to URL: ${url}`)
