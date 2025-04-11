@@ -21,6 +21,9 @@ export default function Home() {
   const [url, setUrl] = useState("")
   const [selector, setSelector] = useState("")
   const [clickSelector, setClickSelector] = useState("")
+  const [filename, setFilename] = useState("")
+  const [viewportWidth, setViewportWidth] = useState("1280")
+  const [viewportHeight, setViewportHeight] = useState("960")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{
     success: boolean
@@ -43,6 +46,9 @@ export default function Home() {
           url,
           selector: selector || undefined,
           clickSelector: clickSelector || undefined,
+          filename: filename || undefined,
+          viewportWidth: parseInt(viewportWidth) || 1280,
+          viewportHeight: parseInt(viewportHeight) || 960,
         }),
       })
 
@@ -104,6 +110,42 @@ export default function Home() {
                 If provided, Playwright will click on the element and take a
                 screenshot by the "selector" parameter.
               </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="filename">Filename (optional)</Label>
+              <Input
+                id="filename"
+                placeholder="screenshot"
+                value={filename}
+                onChange={(e) => setFilename(e.target.value)}
+              />
+              <p className="text-sm text-muted-foreground">
+                Custom filename for the screenshot. If not provided, a random UUID will be used.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="viewportWidth">Viewport Width</Label>
+                <Input
+                  id="viewportWidth"
+                  type="number"
+                  placeholder="1280"
+                  value={viewportWidth}
+                  onChange={(e) => setViewportWidth(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="viewportHeight">Viewport Height</Label>
+                <Input
+                  id="viewportHeight"
+                  type="number"
+                  placeholder="960"
+                  value={viewportHeight}
+                  onChange={(e) => setViewportHeight(e.target.value)}
+                />
+              </div>
             </div>
 
             <Button type="submit" className="w-full" disabled={loading}>

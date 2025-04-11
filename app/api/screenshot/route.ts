@@ -38,7 +38,9 @@ class RequestQueue {
   }
 
   private logQueueStatus() {
-    log(`Queue Status: ${this.currentRequests} active requests, ${this.queue.length} tasks waiting, ${this.maxConcurrent} max concurrent`)
+    log(
+      `Queue Status: ${this.currentRequests} active requests, ${this.queue.length} tasks waiting, ${this.maxConcurrent} max concurrent`
+    )
   }
 
   async enqueue<T>(fn: () => Promise<T>): Promise<T> {
@@ -123,8 +125,22 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      const { url, selector, clickSelector } = await request.json()
-      log("Request parameters", { url, selector, clickSelector })
+      const {
+        url,
+        selector,
+        clickSelector,
+        filename,
+        viewportWidth = 1280,
+        viewportHeight = 960,
+      } = await request.json()
+      log("Request parameters", {
+        url,
+        selector,
+        clickSelector,
+        filename,
+        viewportWidth,
+        viewportHeight,
+      })
 
       if (!url) {
         log("Missing URL parameter")
@@ -138,14 +154,7 @@ export async function POST(request: NextRequest) {
       // Launch browser with specific configuration for Linux
       browser = await puppeteer.launch({
         headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--disable-gpu',
-          '--window-size=1920x1080',
-        ],
+        args: ["--no-sandbox", "--disable-setuid-sandbox"],
         executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
       })
 
@@ -155,17 +164,19 @@ export async function POST(request: NextRequest) {
       try {
         log("Setting viewport")
         // Set viewport size
-        await page.setViewport({ width: 1920, height: 1080 })
+        await page.setViewport({ width: viewportWidth, height: viewportHeight })
 
         log(`Navigating to URL: ${url}`)
         // Navigate to the URL with optimized wait strategy
-        await page.goto(url, { 
-          waitUntil: "networkidle2",
-          timeout: 30000 // 30 seconds timeout for navigation
-        }).catch((error: Error) => {
-          log("Navigation timeout", error)
-          throw new Error(`Navigation timeout: ${error.message}`)
-        })
+        await page
+          .goto(url, {
+            waitUntil: "networkidle2",
+            timeout: 30000, // 30 seconds timeout for navigation
+          })
+          .catch((error: Error) => {
+            log("Navigation timeout", error)
+            throw new Error(`Navigation timeout: ${error.message}`)
+          })
 
         // Create a promise that resolves when a new page is created
         const newPagePromise = new Promise((resolve) => {
@@ -179,13 +190,15 @@ export async function POST(request: NextRequest) {
         const elementExists = clickSelector && (await page.$(clickSelector))
         if (elementExists) {
           log(`Waiting for click selector: ${clickSelector}`)
-          await page.waitForSelector(clickSelector, {
-            visible: true,
-            timeout: 15000, // Increased to 15 seconds
-          }).catch((error: Error) => {
-            log("Click selector timeout", error)
-            throw new Error(`Click selector timeout: ${error.message}`)
-          })
+          await page
+            .waitForSelector(clickSelector, {
+              visible: true,
+              timeout: 15000, // Increased to 15 seconds
+            })
+            .catch((error: Error) => {
+              log("Click selector timeout", error)
+              throw new Error(`Click selector timeout: ${error.message}`)
+            })
 
           log(`Clicking element: ${clickSelector}`)
           await page.click(clickSelector)
@@ -221,11 +234,11 @@ export async function POST(request: NextRequest) {
           // If we got here, a new page was opened
           // Wait for the new page to load
           await pageToScreenshot
-            .waitForNavigation({ 
-              waitUntil: "networkidle2", 
-              timeout: 15000 // Increased to 15 seconds
+            .waitForNavigation({
+              waitUntil: "networkidle2",
+              timeout: 15000, // Increased to 15 seconds
             })
-            .catch(error => {
+            .catch((error) => {
               log("New page navigation timeout", error)
               console.log("Navigation timeout on new page, continuing anyway")
             })
@@ -286,7 +299,7 @@ export async function POST(request: NextRequest) {
 
               const parents = getParents(targetElement)
               const children = getChildren(targetElement)
-              const allElements = document.querySelectorAll('*')
+              const allElements = document.querySelectorAll("*")
 
               // Hide all elements except parents and children
               allElements.forEach((element) => {
@@ -296,10 +309,10 @@ export async function POST(request: NextRequest) {
                   element !== targetElement
                 ) {
                   const style = window.getComputedStyle(element)
-                  if (style.display !== 'none') {
+                  if (style.display !== "none") {
                     const htmlElement = element as HTMLElement
                     htmlElement.dataset.originalDisplay = style.display
-                    htmlElement.style.display = 'none'
+                    htmlElement.style.display = "none"
                   }
                 }
               })
@@ -341,39 +354,42 @@ export async function POST(request: NextRequest) {
 
         log("Optimizing screenshot")
         // Optimize the screenshot using pngquant
-        const optimizedScreenshot = await new Promise<Buffer>((resolve, reject) => {
-          const pngquantStream = new pngquant([
-            '256',
-            '--quality=60-80',
-            '--speed=1',
-            '-'
-          ])
-          const chunks: Buffer[] = []
+        const optimizedScreenshot = await new Promise<Buffer>(
+          (resolve, reject) => {
+            const pngquantStream = new pngquant([
+              "256",
+              "--quality=60-80",
+              "--speed=1",
+              "-",
+            ])
+            const chunks: Buffer[] = []
 
-          pngquantStream.on('data', (chunk: Buffer) => chunks.push(chunk))
-          pngquantStream.on('end', () => resolve(Buffer.concat(chunks)))
-          pngquantStream.on('error', reject)
+            pngquantStream.on("data", (chunk: Buffer) => chunks.push(chunk))
+            pngquantStream.on("end", () => resolve(Buffer.concat(chunks)))
+            pngquantStream.on("error", reject)
 
-          pngquantStream.end(screenshot)
-        })
+            pngquantStream.end(screenshot)
+          }
+        )
 
         log("Generating unique filename")
-        const filename = `${uuidv4()}.png`
+        const finalFilename = `${filename || uuidv4()}.png`
 
         log("Uploading to S3")
         // Upload to S3
         await s3Client.send(
           new PutObjectCommand({
             Bucket: process.env.S3_BUCKET_NAME,
-            Key: filename,
+            Key: finalFilename,
             Body: optimizedScreenshot,
             ContentType: "image/png",
           })
         )
-
-        log("Screenshot uploaded successfully")
+        const screenshotUrl = `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${finalFilename}`
+        log("Screenshot uploaded successfully", screenshotUrl)
         return NextResponse.json({
-          screenshotUrl: `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${filename}`,
+          success: true,
+          screenshotUrl,
         })
       } finally {
         log("Cleaning up browser")
