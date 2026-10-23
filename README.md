@@ -16,9 +16,11 @@ A Next.js API endpoint that captures screenshots of web pages and stores them in
 
 ## Prerequisites
 
-- Node.js (v14 or later)
+- Node.js 22.12 or later within Node 22
 - AWS account with S3 access
 - Puppeteer dependencies
+- The browser installed with Puppeteer, or a compatible `PUPPETEER_EXECUTABLE_PATH`
+- Yarn 1.22.22 (the committed lockfile is validated with frozen installs)
 
 ## Environment Variables
 
@@ -37,7 +39,7 @@ S3_BUCKET_NAME=your-bucket-name
 2. Install dependencies:
 
     ```bash
-    npm install
+    yarn install --frozen-lockfile
     ```
 
 3. Set up your environment variables

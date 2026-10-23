@@ -46,11 +46,9 @@
     "embla-carousel-react": "8.5.1",
     "input-otp": "1.4.1",
     "lucide-react": "^0.454.0",
-    "next": "15.1.0",
+    "next": "15.5.28",
     "next-themes": "^0.4.4",
-    "puppeteer": "latest",
-    "pngquant": "^4.2.0",
-    "pngquant-bin": "^9.0.0",
+    "puppeteer": "25.16.0",
     "react": "^19",
     "react-day-picker": "8.10.1",
     "react-dom": "^19",
@@ -62,15 +60,23 @@
     "tailwindcss-animate": "^1.0.7",
     "uuid": "latest",
     "vaul": "^0.9.6",
-    "zod": "^3.24.1"
+    "zod": "^3.24.1",
+    "sharp": "0.35.5"
   },
   "devDependencies": {
     "@types/node": "^22",
-    "@types/puppeteer": "^7.0.4",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "postcss": "^8",
     "tailwindcss": "^3.4.17",
     "typescript": "^5"
-  }
+  },
+  "resolutions": {
+    "basic-ftp": "5.3.1",
+    "fast-xml-parser": "4.5.7"
+  },
+  "engines": {
+    "node": "^22.12.0"
+  },
+  "packageManager": "yarn@1.22.22"
 }
