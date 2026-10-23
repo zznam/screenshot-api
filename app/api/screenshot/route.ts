@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import puppeteer, { Page } from "puppeteer"
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3"
 import { v4 as uuidv4 } from "uuid"
-import pngquant from "pngquant"
+import sharp from "sharp"
 
 // Logging helper function
 const log = (message: string, data?: any) => {
@@ -353,24 +353,10 @@ export async function POST(request: NextRequest) {
         }
 
         log("Optimizing screenshot")
-        // Optimize the screenshot using pngquant
-        const optimizedScreenshot = await new Promise<Buffer>(
-          (resolve, reject) => {
-            const pngquantStream = new pngquant([
-              "256",
-              "--quality=60-80",
-              "--speed=1",
-              "-",
-            ])
-            const chunks: Buffer[] = []
-
-            pngquantStream.on("data", (chunk: Buffer) => chunks.push(chunk))
-            pngquantStream.on("end", () => resolve(Buffer.concat(chunks)))
-            pngquantStream.on("error", reject)
-
-            pngquantStream.end(screenshot)
-          }
-        )
+        // Optimize PNGs without the legacy pngquant binary downloader.
+        const optimizedScreenshot = await sharp(screenshot)
+          .png({ palette: true, quality: 80, colours: 256, effort: 10 })
+          .toBuffer()
 
         log("Generating unique filename")
         const finalFilename = `${filename || uuidv4()}.png`
